@@ -45,28 +45,30 @@
         // Base stats at level 1
         baseRadius: 15,
         baseBarrelWidth: 12,
-        baseBarrelLength: 30,
+        baseBarrelLength: 35,
         baseBulletLife: 40,
+        baseBulletSpeed: 10,
         
         // Dynamic scaled stats
         radius: 15,
         barrelWidth: 12,
-        barrelLength: 30,
+        barrelLength: 35,
         bulletLife: 40,
+        bulletSpeed: 10,     
         speed: 5,
         
         angle: 0,
         color: "#00b2ee",       
         barrelColor: "#999999", 
         strokeColor: "#555555", 
-        strokeWidth: 4,
+        strokeWidth: 2, // Cut starting line thickness in half (skinny look)
         shootCooldown: 0,
         cooldownMax: 15,
 
         // Animation States
         barrelOffset: 0,     
-        baseRecoilForce: 1.5, 
-        recoilForce: 1.5
+        baseRecoilForce: 0.2, // Subtle body recoil pushback
+        recoilForce: 0.2
     };
 
     // Camera tracking
@@ -130,10 +132,14 @@
         player.radius = player.baseRadius + (progress * 30);
         player.barrelWidth = player.baseBarrelWidth + (progress * 20);
         player.barrelLength = player.baseBarrelLength + (progress * 45);
-        player.bulletLife = player.baseBulletLife + (progress * 50);
-        player.strokeWidth = 4 + (progress * 2);
+        
+        player.bulletLife = player.baseBulletLife + (progress * 60);
+        player.bulletSpeed = player.baseBulletSpeed + (progress * 10); 
+        
+        // Skinny styling scale rule: maximum line width tops out nicely at 3 instead of 6
+        player.strokeWidth = 2 + (progress * 1); 
         player.speed = 5 - (progress * 1.5);
-        player.recoilForce = player.baseRecoilForce + (progress * 2.5);
+        player.recoilForce = player.baseRecoilForce + (progress * 0.4);
     }
 
     // Function to spawn bullets and trigger recoil animation
@@ -146,14 +152,16 @@
             bullets.push({
                 x: spawnX,
                 y: spawnY,
-                vx: Math.cos(player.angle) * 12,
-                vy: Math.sin(player.angle) * 12,
-                radius: player.barrelWidth * 0.5, 
+                vx: Math.cos(player.angle) * player.bulletSpeed, 
+                vy: Math.sin(player.angle) * player.bulletSpeed,
+                radius: player.barrelWidth * 0.45, 
                 color: player.color,
                 life: player.bulletLife 
             });
 
-            player.barrelOffset = player.barrelLength * 0.35; 
+            // BARREL ANIMATION NERF: Reduced punch distance factor from 0.35 to 0.12 (Much less powerful)
+            player.barrelOffset = player.barrelLength * 0.12; 
+            
             player.vx -= Math.cos(player.angle) * player.recoilForce;
             player.vy -= Math.sin(player.angle) * player.recoilForce;
 
@@ -176,7 +184,8 @@
         player.vx *= 0.85;
         player.vy *= 0.85;
 
-        player.barrelOffset += (0 - player.barrelOffset) * 0.15;
+        // Smoothly return barrel back into position
+        player.barrelOffset += (0 - player.barrelOffset) * 0.2;
 
         camera.x = player.x - canvas.width / 2;
         camera.y = player.y - canvas.height / 2;
@@ -261,7 +270,7 @@
         drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 6);
         ctx.fill();
         ctx.strokeStyle = "#555555";
-        ctx.lineWidth = 3;
+        ctx.lineWidth = player.strokeWidth; // Keep HUD outlines uniformly thin
         ctx.stroke();
 
         if (player.level < player.maxLevel) {
