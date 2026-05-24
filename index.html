@@ -43,16 +43,7 @@
         score: 0,
         targetScore: 0, 
         
-        // Base stats at level 1
-        baseRadius: 15,
-        baseBarrelWidth: 12,
-        baseBarrelLength: 35,
-        baseBulletLife: 50,    
-        baseBulletSpeed: 12,
-        baseCooldownMax: 10,   // Base reload time (frames between shots)
-        baseSpeed: 3.5,        
-        
-        // Dynamic scaled stats
+        // Solid clamped stats
         radius: 15,
         barrelWidth: 12,
         barrelLength: 35,
@@ -62,9 +53,9 @@
         shootCooldown: 0,
         cooldownMax: 10,
 
-        // Animation States
+        // Clean static lines & recoil
+        strokeWidth: 2, 
         barrelOffset: 0,     
-        baseRecoilForce: 0.15, 
         recoilForce: 0.15
     };
 
@@ -88,7 +79,7 @@
         if (key === ' ') isMouseDown = true; 
         
         if (key === 'n') {
-            player.targetScore += 26000;
+            player.targetScore = 26000; // Safe direct assignment
         }
     });
 
@@ -105,7 +96,7 @@
     window.addEventListener("mousedown", () => isMouseDown = true);
     window.addEventListener("mouseup", () => isMouseDown = false);
 
-    // Sharp corner rounded rectangle helper
+    // Guaranteed safe rounded rectangle render helper
     function drawRoundedRect(ctx, x, y, width, height, radius) {
         ctx.beginPath();
         ctx.moveTo(x + radius, y);
@@ -120,32 +111,35 @@
         ctx.closePath();
     }
 
-    // Scale attributes safely using solid math integers
+    // Completely bulletproof step-by-step stat upgrading (No division equations to crash engine)
     function updatePlayerStats() {
-        let scoreProgress = Math.min(player.score / 26000, 1);
-        player.level = Math.floor(1 + (scoreProgress * (player.maxLevel - 1)));
-        
-        const progress = (player.level - 1) / (player.maxLevel - 1);
-        
-        player.radius = player.baseRadius + (progress * 30);
-        player.barrelWidth = player.baseBarrelWidth + (progress * 20);
-        player.barrelLength = player.baseBarrelLength + (progress * 45);
-        
-        // Ranges and speed scalers
-        player.bulletLife = player.baseBulletLife + (progress * 130); 
-        player.bulletSpeed = player.baseBulletSpeed + (progress * 14); 
-        
-        // FIXED CRASH MECHANIC: Uses Math.floor to guarantee clean whole integers (Fast 2-frame loop at max level)
-        player.cooldownMax = Math.max(Math.floor(player.baseCooldownMax - (progress * 8)), 2);
-
-        // Control speed
-        player.speed = player.baseSpeed - (progress * 1.2);
-
-        player.strokeWidth = 2 + (progress * 1); 
-        player.recoilForce = player.baseRecoilForce + (progress * 0.25);
+        if (player.score >= 26000) {
+            player.level = 45;
+            player.radius = 45;
+            player.barrelWidth = 32;
+            player.barrelLength = 80;
+            player.bulletLife = 180; // Massive Sniper Range
+            player.bulletSpeed = 26; // Ultra Bullet Velocity
+            player.cooldownMax = 2;   // Ultimate Minigun Reload Rate
+            player.speed = 2.3;      // Heavy Balanced Movement Speed
+            player.strokeWidth = 3;
+            player.recoilForce = 0.4;
+        } else {
+            // Level 1 Base Values
+            player.level = 1;
+            player.radius = 15;
+            player.barrelWidth = 12;
+            player.barrelLength = 35;
+            player.bulletLife = 50;
+            player.bulletSpeed = 12;
+            player.cooldownMax = 10;
+            player.speed = 3.5;
+            player.strokeWidth = 2;
+            player.recoilForce = 0.15;
+        }
     }
 
-    // Function to spawn bullets and trigger recoil animation
+    // Function to fire bullets safely
     function fireBullet() {
         if (player.shootCooldown <= 0) {
             const currentBarrelLength = player.barrelLength - player.barrelOffset;
@@ -158,11 +152,11 @@
                 vx: Math.cos(player.angle) * player.bulletSpeed, 
                 vy: Math.sin(player.angle) * player.bulletSpeed,
                 radius: player.barrelWidth * 0.45, 
-                color: player.color,
+                color: "#00b2ee", 
                 life: player.bulletLife 
             });
 
-            player.barrelOffset = player.barrelLength * 0.1; 
+            player.barrelOffset = player.barrelLength * 0.1; // Subtly back 10%
             player.vx -= Math.cos(player.angle) * player.recoilForce;
             player.vy -= Math.sin(player.angle) * player.recoilForce;
 
@@ -170,14 +164,18 @@
         }
     }
 
-    // Game Loop
+    // Main Run Loop
     function update() {
+        // Smooth score rolling loader
         if (player.score < player.targetScore) {
-            const addedSpeed = Math.ceil((player.targetScore - player.score) / 60);
-            player.score += Math.min(addedSpeed, player.targetScore - player.score);
+            player.score += 434; // Add points evenly over 60 frames (1 second total)
+            if (player.score >= player.targetScore) {
+                player.score = player.targetScore;
+            }
             updatePlayerStats(); 
         }
 
+        // Apply movement engine vectors
         let moveX = 0;
         let moveY = 0;
         if (keys.w) moveY -= player.speed;
@@ -193,8 +191,8 @@
 
         player.barrelOffset += (0 - player.barrelOffset) * 0.2;
 
-        camera.x = player.x - canvas.width / 2;
-        camera.y = player.y - canvas.height / 2;
+        camera.x = Math.floor(player.x - canvas.width / 2);
+        camera.y = Math.floor(player.y - canvas.height / 2);
 
         const worldMouseX = mouse.x + camera.x;
         const worldMouseY = mouse.y + camera.y;
@@ -213,12 +211,13 @@
             if (b.life <= 0) bullets.splice(i, 1);
         }
 
+        // DRAW MANAGEMENT
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         ctx.save();
         ctx.translate(-camera.x, -camera.y);
 
-        // Draw Moving Grid Lines
+        // Grid lines setup
         ctx.strokeStyle = "#e4e5ea";
         ctx.lineWidth = 1;
         const gridSpacing = 40;
@@ -235,41 +234,41 @@
         }
 
         // Render Bullets
-        ctx.strokeStyle = player.strokeColor;
+        ctx.strokeStyle = "#555555";
         ctx.lineWidth = player.strokeWidth;
         ctx.lineJoin = "miter"; 
         bullets.forEach(b => {
             ctx.beginPath();
-            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            ctx.arc(Math.floor(b.x), Math.floor(b.y), Math.floor(b.radius), 0, Math.PI * 2);
             ctx.fillStyle = b.color;
             ctx.fill();
             ctx.stroke();
         });
 
-        // Render Tank
+        // Render Tank Body
         ctx.save();
-        ctx.translate(player.x, player.y);
+        ctx.translate(Math.floor(player.x), Math.floor(player.y));
         ctx.rotate(player.angle);
 
-        ctx.fillStyle = player.barrelColor;
+        ctx.fillStyle = "#999999";
         const animatedLength = player.barrelLength - player.barrelOffset;
-        drawRoundedRect(ctx, 0, -player.barrelWidth / 2, animatedLength, player.barrelWidth, 1.5);
+        drawRoundedRect(ctx, 0, Math.floor(-player.barrelWidth / 2), Math.floor(animatedLength), Math.floor(player.barrelWidth), 1.5);
         ctx.fill();
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
-        ctx.fillStyle = player.color;
+        ctx.arc(0, 0, Math.floor(player.radius), 0, Math.PI * 2);
+        ctx.fillStyle = "#00b2ee";
         ctx.fill();
         ctx.stroke();
 
         ctx.restore();
         ctx.restore();
 
-        // 7. RENDER BOTTOM HUD
+        // 7. RENDER BOTTOM STATUS HUD
         const barWidth = 320;
         const barHeight = 14;
-        const barX = canvas.width / 2 - barWidth / 2;
+        const barX = Math.floor(canvas.width / 2 - barWidth / 2);
         const hudBottomY = canvas.height - 30; 
 
         ctx.fillStyle = "#e4e5ea";
@@ -282,7 +281,7 @@
         let progressPercent = Math.min(player.score / 26000, 1);
         if (player.level < player.maxLevel) {
             ctx.fillStyle = "#85e343"; 
-            drawRoundedRect(ctx, barX, hudBottomY, barWidth * progressPercent, barHeight, 4); 
+            drawRoundedRect(ctx, barX, hudBottomY, Math.floor(barWidth * progressPercent), barHeight, 4); 
             ctx.fill();
         } else {
             ctx.fillStyle = "#ffd700"; 
@@ -294,10 +293,11 @@
         ctx.fillStyle = "#555555";
         
         ctx.font = "bold 13px sans-serif";
-        ctx.fillText(`Score: ${player.score.toLocaleString()}`, canvas.width / 2, hudBottomY - 24);
+        ctx.fillText(`Score: ${Math.floor(player.score).toLocaleString()}`, canvas.width / 2, hudBottomY - 24);
 
         ctx.font = "bold 18px sans-serif";
         ctx.fillText(`Level ${player.level}`, canvas.width / 2, hudBottomY - 6);
 
         if (autoShoot) {
             ctx.textAlign = "left";
+            ctx.font = "14px sans-serif";
