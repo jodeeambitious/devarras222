@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arras.io Tank Growth Prototype</title>
+    <title>Arras.io Tank Prototype</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #f1f2f6;
             font-family: sans-serif;
+            user-select: none;
         }
         canvas {
             display: block;
@@ -31,20 +32,21 @@
     window.addEventListener("resize", resize);
     resize();
 
-    // Player State starting at Level 1
+    // Player State
     const player = {
         x: 0, 
         y: 0,
+        vx: 0, // Velocity X for recoil physics
+        vy: 0, // Velocity Y for recoil physics
         level: 1,
         maxLevel: 45,
-        xp: 0,
-        xpNeeded: 100,
+        score: 0,
         
         // Base stats at level 1
         baseRadius: 15,
         baseBarrelWidth: 12,
         baseBarrelLength: 30,
-        baseBulletLife: 40, // Range is dictated by bullet lifetime frames
+        baseBulletLife: 40,
         
         // Dynamic scaled stats
         radius: 15,
@@ -59,10 +61,15 @@
         strokeColor: "#555555", 
         strokeWidth: 4,
         shootCooldown: 0,
-        cooldownMax: 15
+        cooldownMax: 15,
+
+        // Animation States
+        barrelOffset: 0,     // Tracks how much the barrel is pushed back (pixels)
+        baseRecoilForce: 1.5, // How hard the tank body gets pushed back at level 1
+        recoilForce: 1.5
     };
 
-    // Camera object tracking the player
+    // Camera tracking
     const camera = { x: 0, y: 0 };
 
     // Control States
@@ -80,6 +87,13 @@
         if (key in keys) keys[key] = true;
         if (key === 'e') autoShoot = !autoShoot;
         if (key === ' ') isMouseDown = true; 
+        
+        // Instantly Max Out Level by pressing N
+        if (key === 'n') {
+            player.level = player.maxLevel;
+            player.score = 26000;
+            updatePlayerStats();
+        }
     });
 
     window.addEventListener("keyup", (e) => {
@@ -110,81 +124,86 @@
         ctx.closePath();
     }
 
-    // Recalculate stats based on level
+    // Scale attributes based on current level
     function updatePlayerStats() {
-        if (player.level > player.maxLevel) player.level = player.maxLevel;
-        
-        // Progress percentage from level 1 to 45
         const progress = (player.level - 1) / (player.maxLevel - 1);
         
-        // Tank grows from size 15 to 45
         player.radius = player.baseRadius + (progress * 30);
-        // Barrel gets wider
         player.barrelWidth = player.baseBarrelWidth + (progress * 20);
-        // Barrel gets longer (better visual reach)
         player.barrelLength = player.baseBarrelLength + (progress * 45);
-        // Bullets live longer (giving them much further range)
         player.bulletLife = player.baseBulletLife + (progress * 50);
-        // Thick outlines scale up slightly with size
         player.strokeWidth = 4 + (progress * 2);
-        // Large tanks move slightly slower like real Arras.io mechanics
         player.speed = 5 - (progress * 1.5);
+        // Recoil force scales up as you level up and bullets get larger
+        player.recoilForce = player.baseRecoilForce + (progress * 2.5);
     }
 
-    // Function to spawn bullets
+    // Function to spawn bullets and trigger recoil animation
     function fireBullet() {
         if (player.shootCooldown <= 0) {
-            const spawnX = player.x + Math.cos(player.angle) * player.barrelLength;
-            const spawnY = player.y + Math.sin(player.angle) * player.barrelLength;
+            // Calculate spawn position using animated barrel length
+            const currentBarrelLength = player.barrelLength - player.barrelOffset;
+            const spawnX = player.x + Math.cos(player.angle) * currentBarrelLength;
+            const spawnY = player.y + Math.sin(player.angle) * currentBarrelLength;
             
             bullets.push({
                 x: spawnX,
                 y: spawnY,
                 vx: Math.cos(player.angle) * 12,
                 vy: Math.sin(player.angle) * 12,
-                radius: player.barrelWidth * 0.5, // Bullet scales with barrel size
+                radius: player.barrelWidth * 0.5, 
                 color: player.color,
-                life: player.bulletLife // Dynamic range based on level
+                life: player.bulletLife 
             });
+
+            // 1. Barrel Recoil Animation: Snap barrel backward instantly
+            player.barrelOffset = player.barrelLength * 0.35; // Pushed back 35% of total length
+
+            // 2. Body Recoil Physics: Push tank backward away from shooting angle
+            player.vx -= Math.cos(player.angle) * player.recoilForce;
+            player.vy -= Math.sin(player.angle) * player.recoilForce;
+
             player.shootCooldown = player.cooldownMax;
         }
     }
 
     // Game Loop
     function update() {
-        // 1. Passive XP Generation to show off growth mechanics
-        if (player.level < player.maxLevel) {
-            player.xp += 0.5; // Gain half an XP point per frame
-            if (player.xp >= player.xpNeeded) {
-                player.xp = 0;
-                player.level++;
-                player.xpNeeded = 100 + (player.level * 15); // Higher levels need more XP
-                updatePlayerStats();
-            }
-        }
+        // 1. Core WASD Movement
+        let moveX = 0;
+        let moveY = 0;
+        if (keys.w) moveY -= player.speed;
+        if (keys.s) moveY += player.speed;
+        if (keys.a) moveX -= player.speed;
+        if (keys.d) moveX += player.speed;
 
-        // 2. Move Player
-        if (keys.w) player.y -= player.speed;
-        if (keys.s) player.y += player.speed;
-        if (keys.a) player.x -= player.speed;
-        if (keys.d) player.x += player.speed;
+        // Apply WASD movement + recoil physics velocity
+        player.x += moveX + player.vx;
+        player.y += moveY + player.vy;
 
-        // 3. Center Camera on Player
+        // Decelerate the body recoil velocity back to zero (friction)
+        player.vx *= 0.85;
+        player.vy *= 0.85;
+
+        // Smoothly slide barrel back out to full length (Lerp)
+        player.barrelOffset += (0 - player.barrelOffset) * 0.15;
+
+        // 2. Center Camera on Player
         camera.x = player.x - canvas.width / 2;
         camera.y = player.y - canvas.height / 2;
 
-        // 4. Calculate Angle
+        // 3. Calculate Angle
         const worldMouseX = mouse.x + camera.x;
         const worldMouseY = mouse.y + camera.y;
         player.angle = Math.atan2(worldMouseY - player.y, worldMouseX - player.x);
 
-        // 5. Handle Weapons
+        // 4. Handle Weapons
         if (player.shootCooldown > 0) player.shootCooldown--;
         if (autoShoot || isMouseDown) {
             fireBullet();
         }
 
-        // 6. Update Bullets
+        // 5. Update Bullets
         for (let i = bullets.length - 1; i >= 0; i--) {
             let b = bullets[i];
             b.x += b.vx;
@@ -193,7 +212,7 @@
             if (b.life <= 0) bullets.splice(i, 1);
         }
 
-        // 7. RENDER SCREEN
+        // 6. RENDER SCREEN
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         ctx.save();
@@ -232,9 +251,10 @@
         ctx.translate(player.x, player.y);
         ctx.rotate(player.angle);
 
-        // Draw Dynamic Barrel
+        // Draw Animated Barrel (Uses length minus current recoil offset)
         ctx.fillStyle = player.barrelColor;
-        drawRoundedRect(ctx, 0, -player.barrelWidth / 2, player.barrelLength, player.barrelWidth, 4);
+        const animatedLength = player.barrelLength - player.barrelOffset;
+        drawRoundedRect(ctx, 0, -player.barrelWidth / 2, animatedLength, player.barrelWidth, 4);
         ctx.fill();
         ctx.stroke();
 
@@ -248,54 +268,34 @@
         ctx.restore();
         ctx.restore();
 
-        // 8. RENDER STATS HUD (Fixed to Screen)
-        // Level Text
-        ctx.fillStyle = "#555555";
-        ctx.font = "bold 20px sans-serif";
-        ctx.fillText(`Level ${player.level}`, 20, 40);
-        
-        if (autoShoot) {
-            ctx.font = "14px sans-serif";
-            ctx.fillText("AUTO FIRE: ON", 20, 65);
-        }
-
-        // Experience Bar Container
-        const barWidth = 300;
-        const barHeight = 16;
+        // 7. RENDER BOTTOM HUD (Arras.io Style Stack)
+        const barWidth = 320;
+        const barHeight = 14;
         const barX = canvas.width / 2 - barWidth / 2;
-        const barY = canvas.height - 40;
+        const hudBottomY = canvas.height - 30; 
 
-        // Draw Background Bar
+        // Draw XP Progress Bar Container
         ctx.fillStyle = "#e4e5ea";
-        drawRoundedRect(ctx, barX, barY, barWidth, barHeight, 8);
+        drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 6);
         ctx.fill();
         ctx.strokeStyle = "#555555";
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // Draw XP Fill (Green bar)
+        // Draw XP Fill
         if (player.level < player.maxLevel) {
-            const xpPercentage = player.xp / player.xpNeeded;
-            ctx.fillStyle = "#85e343";
-            drawRoundedRect(ctx, barX, barY, barWidth * xpPercentage, barHeight, 8);
+            ctx.fillStyle = "#85e343"; 
+            drawRoundedRect(ctx, barX, hudBottomY, barWidth * 0.05, barHeight, 6); 
             ctx.fill();
         } else {
-            // MAX LEVEL FILL
-            ctx.fillStyle = "#ffd700"; // Gold fill
-            drawRoundedRect(ctx, barX, barY, barWidth, barHeight, 8);
+            ctx.fillStyle = "#ffd700"; 
+            drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 6);
             ctx.fill();
-            ctx.fillStyle = "#555555";
-            ctx.font = "bold 11px sans-serif";
-            ctx.fillText("MAX LEVEL", barX + barWidth / 2 - 30, barY + 12);
         }
 
-        requestAnimationFrame(update);
-    }
-
-    // Initialize stats
-    updatePlayerStats();
-    requestAnimationFrame(update);
-</script>
-
-</body>
-</html>
+        // Level and Score Labels under the bar
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#555555";
+        
+        // Score Line
+        ctx.font = "bold 13px sans-serif";
