@@ -41,34 +41,31 @@
         level: 1,
         maxLevel: 45,
         score: 0,
+        targetScore: 0, 
         
         // Base stats at level 1
         baseRadius: 15,
         baseBarrelWidth: 12,
         baseBarrelLength: 35,
-        baseBulletLife: 40,
-        baseBulletSpeed: 10,
+        baseBulletLife: 50,    // Increased base duration
+        baseBulletSpeed: 12,
+        baseCooldownMax: 10,   // Faster base reload (lower frame delay)
+        baseSpeed: 3.5,        // Reduced base movement speed for better control
         
         // Dynamic scaled stats
         radius: 15,
         barrelWidth: 12,
         barrelLength: 35,
-        bulletLife: 40,
-        bulletSpeed: 10,     
-        speed: 5,
-        
-        angle: 0,
-        color: "#00b2ee",       
-        barrelColor: "#999999", 
-        strokeColor: "#555555", 
-        strokeWidth: 2, // Cut starting line thickness in half (skinny look)
+        bulletLife: 50,
+        bulletSpeed: 12,     
+        speed: 3.5,
         shootCooldown: 0,
-        cooldownMax: 15,
+        cooldownMax: 10,
 
         // Animation States
         barrelOffset: 0,     
-        baseRecoilForce: 0.2, // Subtle body recoil pushback
-        recoilForce: 0.2
+        baseRecoilForce: 0.15, 
+        recoilForce: 0.15
     };
 
     // Camera tracking
@@ -91,9 +88,7 @@
         if (key === ' ') isMouseDown = true; 
         
         if (key === 'n') {
-            player.level = player.maxLevel;
-            player.score = 26000;
-            updatePlayerStats();
+            player.targetScore += 26000;
         }
     });
 
@@ -110,7 +105,7 @@
     window.addEventListener("mousedown", () => isMouseDown = true);
     window.addEventListener("mouseup", () => isMouseDown = false);
 
-    // Rounded rectangle helper
+    // Rounded rectangle helper - radius lowered for sharp vector edges
     function drawRoundedRect(ctx, x, y, width, height, radius) {
         ctx.beginPath();
         ctx.moveTo(x + radius, y);
@@ -127,19 +122,27 @@
 
     // Scale attributes based on current level
     function updatePlayerStats() {
+        let scoreProgress = Math.min(player.score / 26000, 1);
+        player.level = Math.floor(1 + (scoreProgress * (player.maxLevel - 1)));
+        
         const progress = (player.level - 1) / (player.maxLevel - 1);
         
         player.radius = player.baseRadius + (progress * 30);
         player.barrelWidth = player.baseBarrelWidth + (progress * 20);
         player.barrelLength = player.baseBarrelLength + (progress * 45);
         
-        player.bulletLife = player.baseBulletLife + (progress * 60);
-        player.bulletSpeed = player.baseBulletSpeed + (progress * 10); 
+        // MASSIVE RANGE UPGRADE: Lifespan and speed scale heavily at level 45
+        player.bulletLife = player.baseBulletLife + (progress * 130); 
+        player.bulletSpeed = player.baseBulletSpeed + (progress * 14); 
         
-        // Skinny styling scale rule: maximum line width tops out nicely at 3 instead of 6
+        // RELOAD BUFF: Cooldown drops as you level up, making you fire insanely fast
+        player.cooldownMax = Math.max(player.baseCooldownMax - (progress * 7.5), 2.5);
+
+        // BALANCED MOVEMENT SPEED: Moves slower and heavier so it doesn't spin out of control
+        player.speed = player.baseSpeed - (progress * 1.2);
+
         player.strokeWidth = 2 + (progress * 1); 
-        player.speed = 5 - (progress * 1.5);
-        player.recoilForce = player.baseRecoilForce + (progress * 0.4);
+        player.recoilForce = player.baseRecoilForce + (progress * 0.25);
     }
 
     // Function to spawn bullets and trigger recoil animation
@@ -159,9 +162,7 @@
                 life: player.bulletLife 
             });
 
-            // BARREL ANIMATION NERF: Reduced punch distance factor from 0.35 to 0.12 (Much less powerful)
-            player.barrelOffset = player.barrelLength * 0.12; 
-            
+            player.barrelOffset = player.barrelLength * 0.1; 
             player.vx -= Math.cos(player.angle) * player.recoilForce;
             player.vy -= Math.sin(player.angle) * player.recoilForce;
 
@@ -171,6 +172,12 @@
 
     // Game Loop
     function update() {
+        if (player.score < player.targetScore) {
+            const addedSpeed = Math.ceil((player.targetScore - player.score) / 60);
+            player.score += Math.min(addedSpeed, player.targetScore - player.score);
+            updatePlayerStats(); 
+        }
+
         let moveX = 0;
         let moveY = 0;
         if (keys.w) moveY -= player.speed;
@@ -184,7 +191,6 @@
         player.vx *= 0.85;
         player.vy *= 0.85;
 
-        // Smoothly return barrel back into position
         player.barrelOffset += (0 - player.barrelOffset) * 0.2;
 
         camera.x = player.x - canvas.width / 2;
@@ -231,7 +237,7 @@
         // Render Bullets
         ctx.strokeStyle = player.strokeColor;
         ctx.lineWidth = player.strokeWidth;
-        ctx.lineJoin = "round";
+        ctx.lineJoin = "miter"; // Sharp outline join style
         bullets.forEach(b => {
             ctx.beginPath();
             ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
@@ -247,7 +253,8 @@
 
         ctx.fillStyle = player.barrelColor;
         const animatedLength = player.barrelLength - player.barrelOffset;
-        drawRoundedRect(ctx, 0, -player.barrelWidth / 2, animatedLength, player.barrelWidth, 4);
+        // Radius set to 1.5 for a clean sharp barrel tip shape
+        drawRoundedRect(ctx, 0, -player.barrelWidth / 2, animatedLength, player.barrelWidth, 1.5);
         ctx.fill();
         ctx.stroke();
 
@@ -267,19 +274,20 @@
         const hudBottomY = canvas.height - 30; 
 
         ctx.fillStyle = "#e4e5ea";
-        drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 6);
+        drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 4);
         ctx.fill();
         ctx.strokeStyle = "#555555";
-        ctx.lineWidth = player.strokeWidth; // Keep HUD outlines uniformly thin
+        ctx.lineWidth = player.strokeWidth; 
         ctx.stroke();
 
+        let progressPercent = Math.min(player.score / 26000, 1);
         if (player.level < player.maxLevel) {
             ctx.fillStyle = "#85e343"; 
-            drawRoundedRect(ctx, barX, hudBottomY, barWidth * 0.05, barHeight, 6); 
+            drawRoundedRect(ctx, barX, hudBottomY, barWidth * progressPercent, barHeight, 4); 
             ctx.fill();
         } else {
             ctx.fillStyle = "#ffd700"; 
-            drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 6);
+            drawRoundedRect(ctx, barX, hudBottomY, barWidth, barHeight, 4);
             ctx.fill();
         }
 
@@ -287,24 +295,3 @@
         ctx.fillStyle = "#555555";
         
         ctx.font = "bold 13px sans-serif";
-        ctx.fillText(`Score: ${player.score.toLocaleString()}`, canvas.width / 2, hudBottomY - 24);
-
-        ctx.font = "bold 18px sans-serif";
-        ctx.fillText(`Level ${player.level}`, canvas.width / 2, hudBottomY - 6);
-
-        if (autoShoot) {
-            ctx.textAlign = "left";
-            ctx.font = "14px sans-serif";
-            ctx.fillStyle = "#555555";
-            ctx.fillText("AUTO FIRE: ON", 20, 35);
-        }
-
-        requestAnimationFrame(update);
-    }
-
-    updatePlayerStats();
-    requestAnimationFrame(update);
-</script>
-
-</body>
-</html>
