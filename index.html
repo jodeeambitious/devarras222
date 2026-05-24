@@ -47,10 +47,10 @@
         baseRadius: 15,
         baseBarrelWidth: 12,
         baseBarrelLength: 35,
-        baseBulletLife: 50,    // Increased base duration
+        baseBulletLife: 50,    
         baseBulletSpeed: 12,
-        baseCooldownMax: 10,   // Faster base reload (lower frame delay)
-        baseSpeed: 3.5,        // Reduced base movement speed for better control
+        baseCooldownMax: 10,   // Base reload time (frames between shots)
+        baseSpeed: 3.5,        
         
         // Dynamic scaled stats
         radius: 15,
@@ -105,7 +105,7 @@
     window.addEventListener("mousedown", () => isMouseDown = true);
     window.addEventListener("mouseup", () => isMouseDown = false);
 
-    // Rounded rectangle helper - radius lowered for sharp vector edges
+    // Sharp corner rounded rectangle helper
     function drawRoundedRect(ctx, x, y, width, height, radius) {
         ctx.beginPath();
         ctx.moveTo(x + radius, y);
@@ -120,7 +120,7 @@
         ctx.closePath();
     }
 
-    // Scale attributes based on current level
+    // Scale attributes safely using solid math integers
     function updatePlayerStats() {
         let scoreProgress = Math.min(player.score / 26000, 1);
         player.level = Math.floor(1 + (scoreProgress * (player.maxLevel - 1)));
@@ -131,14 +131,14 @@
         player.barrelWidth = player.baseBarrelWidth + (progress * 20);
         player.barrelLength = player.baseBarrelLength + (progress * 45);
         
-        // MASSIVE RANGE UPGRADE: Lifespan and speed scale heavily at level 45
+        // Ranges and speed scalers
         player.bulletLife = player.baseBulletLife + (progress * 130); 
         player.bulletSpeed = player.baseBulletSpeed + (progress * 14); 
         
-        // RELOAD BUFF: Cooldown drops as you level up, making you fire insanely fast
-        player.cooldownMax = Math.max(player.baseCooldownMax - (progress * 7.5), 2.5);
+        // FIXED CRASH MECHANIC: Uses Math.floor to guarantee clean whole integers (Fast 2-frame loop at max level)
+        player.cooldownMax = Math.max(Math.floor(player.baseCooldownMax - (progress * 8)), 2);
 
-        // BALANCED MOVEMENT SPEED: Moves slower and heavier so it doesn't spin out of control
+        // Control speed
         player.speed = player.baseSpeed - (progress * 1.2);
 
         player.strokeWidth = 2 + (progress * 1); 
@@ -237,7 +237,7 @@
         // Render Bullets
         ctx.strokeStyle = player.strokeColor;
         ctx.lineWidth = player.strokeWidth;
-        ctx.lineJoin = "miter"; // Sharp outline join style
+        ctx.lineJoin = "miter"; 
         bullets.forEach(b => {
             ctx.beginPath();
             ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
@@ -253,7 +253,6 @@
 
         ctx.fillStyle = player.barrelColor;
         const animatedLength = player.barrelLength - player.barrelOffset;
-        // Radius set to 1.5 for a clean sharp barrel tip shape
         drawRoundedRect(ctx, 0, -player.barrelWidth / 2, animatedLength, player.barrelWidth, 1.5);
         ctx.fill();
         ctx.stroke();
@@ -295,3 +294,10 @@
         ctx.fillStyle = "#555555";
         
         ctx.font = "bold 13px sans-serif";
+        ctx.fillText(`Score: ${player.score.toLocaleString()}`, canvas.width / 2, hudBottomY - 24);
+
+        ctx.font = "bold 18px sans-serif";
+        ctx.fillText(`Level ${player.level}`, canvas.width / 2, hudBottomY - 6);
+
+        if (autoShoot) {
+            ctx.textAlign = "left";
